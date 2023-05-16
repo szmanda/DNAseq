@@ -14,7 +14,7 @@ namespace DNAseq
         public static List<Instance> LoadInstances()
         {
             List<Instance> instances = new List<Instance>();
-            string path = Path.Combine(projectDirectory, "tests");
+            string path = Path.Combine(projectDirectory, "instances");
             Console.WriteLine($"Loading instances from {path}");
             foreach (string entry in Directory.EnumerateFiles(path))
             {
