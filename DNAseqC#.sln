@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33502.453
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DNAseqC#", "DNAseqC#.csproj", "{BF111BED-0111-4511-8CD2-1C4118A52B4C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BF111BED-0111-4511-8CD2-1C4118A52B4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF111BED-0111-4511-8CD2-1C4118A52B4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF111BED-0111-4511-8CD2-1C4118A52B4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF111BED-0111-4511-8CD2-1C4118A52B4C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {44F1A001-532B-4D4E-B132-30FEADC98DD8}
+	EndGlobalSection
+EndGlobal
