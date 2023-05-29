@@ -42,12 +42,14 @@ namespace DNAseq
             this.olig = olig;
             this.arcs = arcs;
             this.incoming = 0;
+            this.cycleOffset = -1;
         }
 
         public int id { get; set; }
         public Oligonucleotide olig { get; set; }
         public List<Arc> arcs { get; set; }
         public int pathLength { get; set; }
+        public int pathCost { get; set; }
         public int? cycleId { get; set; }
         public int cycleOffset { get; set; }
         public int incoming { get; set; }

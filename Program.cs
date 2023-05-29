@@ -23,7 +23,9 @@ foreach (Instance instance in mockInstances)
 Console.WriteLine("\n\nLoading instances");
 List<Instance> instances = Utils.LoadInstances();
 //for (int i = 0; i < instances.Count; i++)
-int i = 25; // instance 55.300-120 (many negative errors)
+//int i = 30; // instance 55.300-120 (many negative errors)
+//int i = 25; // instance 53.500+50 (few positive errors)
+int i = 24;
 {
     Console.WriteLine(instances[i].toString());
     alg = new CycleBreakerAlgorythm(instances[i]);

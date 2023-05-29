@@ -58,7 +58,6 @@ namespace DNAseq
 
 
             Console.WriteLine("Finished.");
-
         }
 
         public List<int> getCycle(int id)
