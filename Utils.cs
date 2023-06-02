@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -34,6 +35,21 @@ namespace DNAseq
                 instances.Add(instance);
             }
             return instances;
+        }
+
+        public static void SaveToFile(string filepath, string data)
+        {
+            filepath = Path.Combine(projectDirectory, filepath);
+            try
+            {
+                StreamWriter file = new StreamWriter(filepath, true);
+                file.WriteLine(data);
+                file.Close();
+                Console.WriteLine("SAVED: result to the file");
+            } catch
+            {
+                Console.WriteLine("WARNING: Saving to file failed!\n\n\n\n");
+            }
         }
 
         public static List<Instance> LoadMockInstances()

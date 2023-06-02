@@ -13,6 +13,7 @@ namespace DNAseq
         public List<Vertex> vertices;
         public List<int> cycles;
         public int[,] offsets;
+        public int solutionOligCount = 0;
 
         public CycleBreakerAlgorythm(Instance instance) {
             int s = instance.oligonucleotides.Count;
@@ -20,7 +21,7 @@ namespace DNAseq
             this.cycles = new List<int>();
             this.offsets = new int[s,s];
         }
-        public void run() {
+        public String run() {
             generateOffsets(instance.oligonucleotides);
             int count = instance.oligonucleotides.Count;
             List<Oligonucleotide> oligs = instance.oligonucleotides;
@@ -106,16 +107,26 @@ namespace DNAseq
             Console.WriteLine($"oligCount: {longest.pathLength}, cost: {10 + longest.pathCost}");
             // printSuccessors(longest.id);
 
+            Console.WriteLine($"============starting-with-{cycles.Count}-cycles============");
 
             /// Breaking the cycle and joining in to anoter vertex
             /// Simplest version joining only to vertices:
             /// - without predacessors,
             /// - leading to a different cycle
             /// - not checking successors for a better match.
-            while (cycles.Count > 1)
+            int iterationsLimiter = 3;
+            while (cycles.Count >= 1 && iterationsLimiter > 0)
             {
                 int cycleId = cycles[0];
                 int cycleLength = findPathLength(vertices[cycleId], new List<int>());
+                if (cycleLength == 0) {
+                    Console.WriteLine($"ERROR: Cycle {cycleId} has no length!!!");
+                    printSuccessors(cycleId);
+                    Console.WriteLine("Removing this cycle!");
+                    cycles.RemoveAt(0);
+                    Console.ReadKey();
+                    continue;
+                }
 
                 Console.WriteLine($"\t Breaking the cycle {cycleId} of length {cycleLength}");
                 printSuccessors(cycleId);
@@ -184,7 +195,7 @@ namespace DNAseq
                     newSelfArcs.Add(new Arc(bestBr, bestNew, costNew, costNew));
                 }
                 Arc bestArc = new Arc(0,1,100,100);
-                float bestRatio = 0;
+                float bestRatio = -1000;
                 newArcs = newArcs.OrderBy(a => a.cost).Take(5).ToList();
                 Console.WriteLine("5 best new arcs:");
                 foreach (Arc arc in newArcs)
@@ -203,8 +214,8 @@ namespace DNAseq
                         int lengthNew = start.pathLength + lengthDiff;
                         float costDiff = (float)extensionCost; // TODO: subtract the cost of the part after cut-off point
                         float costNew = start.pathCost + extensionCost;
-                        float lengthToCostRatio = lengthNew * lengthNew / costNew; // using squared length to promote longer solutions
-                        if (lengthToCostRatio > bestRatio)
+                        float lengthToCostRatio = (costNew != 0) ? lengthNew * lengthNew / costNew : -1000; // using squared length to promote longer solutions
+                        if (lengthToCostRatio > bestRatio && arc.from != arc.to)
                         {
                             bestRatio = lengthToCostRatio;
                             bestArc = arc;
@@ -219,7 +230,7 @@ namespace DNAseq
                 // TODO: Add Self-join!!!
                 // TODO: REwrite this stuff, clearly separating diffs.
                 Arc bestSelfArc = new Arc(0, 1, 100, 100);
-                float bestSelfRatio = 0;
+                float bestSelfRatio = -1000;
                 newSelfArcs = newSelfArcs.OrderBy(a => a.cost).Take(5).ToList();
                 Console.WriteLine("5 best new SELF arcs:");
                 foreach (Arc arc in newSelfArcs)
@@ -241,8 +252,8 @@ namespace DNAseq
                         int lengthNew = start.pathLength + lengthDiff;
                         float costDiff = (float)extensionCost; // TODO: subtract the cost of the part after cut-off point
                         float costNew = start.pathCost + extensionCost;
-                        float lengthToCostRatio = lengthNew * lengthNew / costNew; // using squared length to promote longer solutions
-                        if (lengthToCostRatio > bestRatio)
+                        float lengthToCostRatio = (costNew != 0) ? lengthNew * lengthNew / costNew : -1000; // using squared length to promote longer solutions
+                        if (lengthToCostRatio > bestSelfRatio && arc.from != arc.to)
                         {
                             bestSelfRatio = lengthToCostRatio;
                             bestSelfArc = arc;
@@ -252,14 +263,16 @@ namespace DNAseq
                         Console.WriteLine($"\tlength/cost: {lengthToCostRatio}, lengthDiff/costDiff: {lengthDiff / costDiff}, sq(length)/cost: {lengthNew*lengthNew / costNew}");
                     }
                 }
+
+                bool doSelfJoin = false;
+                if (cycles.Count == 1 || bestSelfRatio > bestRatio) { doSelfJoin = true; }
                 int newCycleId = vertices[bestArc.to].cycleId ?? -1;
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                // Console.WriteLine($"Decision made - joining {vertices[bestArc.from].olig.text} --{bestArc.cost}--> {vertices[bestArc.to].olig.text}");
-                Console.WriteLine($"Decision made - joining {vertices[bestSelfArc.from].olig.text} --{bestSelfArc.cost}--> {vertices[bestSelfArc.to].olig.text} (SELF)");
+                if (!doSelfJoin) Console.WriteLine($"Decision made - joining {vertices[bestArc.from].olig.text} --{bestArc.cost}--> {vertices[bestArc.to].olig.text}");
+                else             Console.WriteLine($"Decision made - self joining {vertices[bestSelfArc.from].olig.text} --{bestSelfArc.cost}--> {vertices[bestSelfArc.to].olig.text} (SELF)");
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine($"Before join, cycle {newCycleId} of length {findPathLength(vertices[newCycleId], new List<int>())} has starting points of such lengths:");
-                foreach (Vertex v in vertices)
-                {
+                foreach (Vertex v in vertices) {
                     if (v.cycleId == newCycleId && v.incoming == 0)
                         Console.Write($"{v.pathLength} ");
                 }
@@ -273,175 +286,179 @@ namespace DNAseq
                         Console.WriteLine($"{v.olig.text} offset: {v.cycleOffset}, findOffset: {findCycleOffset(v)}");
                 }*/
 
-
-
-                //////////// SELF JOIN
-                Console.WriteLine();
-                List<Vertex> cycle = findVerticesInCycle(cycleId);
-                startVerticesInThisCycle = vertices.Where(a => a.incoming == 0 && a.cycleId == cycleId).OrderByDescending(a => a.pathLength).ToList();
-
-                int outCycleOffset = vertices[bestSelfArc.from].cycleOffset;
-                int inCycleOffset = findCycleOffset(vertices[bestSelfArc.to]);
-                int outCycleOffsetRelative = cycleLength;
-                int inCycleOffsetRelative = ((-1 + inCycleOffset - outCycleOffset) % cycleLength );
-                Console.WriteLine($"Old offsets (this will all be part of a cycle); from: {outCycleOffset} (rel:{outCycleOffsetRelative}) to: {inCycleOffset}(rel:{inCycleOffsetRelative}) (total cycle length: {cycleLength})");
-
-                int newCycleLength = cycleLength - inCycleOffsetRelative + vertices[bestSelfArc.to].pathLength - cycleLength;
-                Console.WriteLine($"New cycle will have a length of {newCycleLength}");
-                if (newCycleLength <= cycleLength) { Console.WriteLine("WARNING: after self join, cycle length will not increase. Unpredictable results possible!"); return; }
-
-                List<int> visited = new List<int>();
-                // fetchnig old offsets for starting vertices
-                foreach (Vertex start in startVerticesInThisCycle)
+                if (doSelfJoin)
                 {
-                    start.cycleOffset = findCycleOffset(start);
-                }
+                    //////////// SELF JOIN
+                    Console.WriteLine();
+                    List<Vertex> cycle = findVerticesInCycle(cycleId);
+                    startVerticesInThisCycle = vertices.Where(a => a.incoming == 0 && a.cycleId == cycleId).OrderByDescending(a => a.pathLength).ToList();
 
-                // joining cycles:
-                Console.WriteLine($"{bestSelfArc.from} --> {bestSelfArc.to}");
-                vertices[bestSelfArc.from].arcs[0] = bestSelfArc;
-                
-                newCycleId = findVerticesInCycle(bestSelfArc.from).OrderBy(v => v.id).First().id;
-                int newCycleCost = bestSelfArc.cost;
-                int tmpId = bestSelfArc.to;
-                for (int i = 0; i < newCycleLength; i++)
-                {
-                    newCycleCost += vertices[tmpId].arcs[0].cost;
-                    tmpId = vertices[tmpId].arcs[0].to; // next
-                    Vertex v = vertices[tmpId];
-                }
-                int counter = 0;
-                Console.WriteLine($"Old cycle: [id: {cycleId}, length:{cycleLength}]");
-                Console.WriteLine($"New cycle: [id: {newCycleId}, length:{newCycleLength}, cost: {newCycleCost}]");
-                Vertex tmpIn = vertices[cycleId];
-                for (int i = 0; i < vertices[bestSelfArc.to].cycleOffset; i++)
-                {
-                    tmpIn = vertices[tmpIn.arcs[0].to];
-                }
-                Vertex oldIn = new Vertex(tmpIn.id, tmpIn.olig, tmpIn.arcs);
-                oldIn.incoming = tmpIn.incoming;
-                oldIn.pathLength = tmpIn.pathLength;
-                oldIn.arcs = tmpIn.arcs;
-                oldIn.pathCost = tmpIn.pathCost;
-                Console.WriteLine($"Old IN {oldIn.id} {oldIn.olig.text} {oldIn.cycleOffset}    cost:{oldIn.arcs[0].cost}");
+                    int outCycleOffset = vertices[bestSelfArc.from].cycleOffset;
+                    int inCycleOffset = findCycleOffset(vertices[bestSelfArc.to]);
+                    int outCycleOffsetRelative = cycleLength;
+                    int inCycleOffsetRelative = ((-1 + inCycleOffset - outCycleOffset) % cycleLength);
+                    Console.WriteLine($"Old offsets (this will all be part of a cycle); from: {outCycleOffset} (rel:{outCycleOffsetRelative}) to: {inCycleOffset}(rel:{inCycleOffsetRelative}) (total cycle length: {cycleLength})");
 
-                foreach (Vertex v in findVerticesInCycle(newCycleId))
-                {
-                    v.cycleOffset = counter++;
-                    v.cycleId = newCycleId;
-                    v.pathLength = newCycleLength;
-                    v.pathCost = newCycleCost;
+                    int newCycleLength = cycleLength - inCycleOffsetRelative + vertices[bestSelfArc.to].pathLength - cycleLength;
+                    Console.WriteLine($"New cycle will have a length of {newCycleLength}");
+                    if (newCycleLength <= cycleLength) {
+                        Console.WriteLine("WARNING: after self join, cycle length will not increase. Unpredictable results possible! Breaking algorythm loop");
+                        break;
+                    }
 
-                    visited.Add(v.id);
-                    // Display new cycle:
-                    // Console.WriteLine($"{v.id}\t{v.olig.text} {v.cycleOffset}\t cost:{v.arcs[0].cost}");
-                }
-
-                foreach (Vertex start in startVerticesInThisCycle)
-                {
-                    int id = start.id;
-                    Console.Write($"{start.id} ");
-                    int oldOffset = start.cycleOffset;
-                    int offsetRelative = ((-1 + oldOffset - outCycleOffset + cycleLength) % cycleLength);
-                    int inOffsetRelative = ((-1 + oldIn.cycleOffset - outCycleOffset + cycleLength) % cycleLength);
-
-                    int newOffset = findCycleOffset(start); // only works for joiners with offset >= inOffset
-                    int lenDiff = start.pathLength - cycleLength - inOffsetRelative; // only works for joiners with offset > inOffset
-                    Console.WriteLine($"Changing vertecies starting with {start.olig.text} (length: {start.pathLength}) in cycle {start.cycleId} with offset {oldOffset} (rel:{offsetRelative})");
-                    for (int i = 0; i < start.pathLength - cycleLength; i++)
+                    List<int> visited = new List<int>();
+                    // fetchnig old offsets for starting vertices
+                    foreach (Vertex start in startVerticesInThisCycle)
                     {
-                        if (visited.Contains(id)) break;
-                        visited.Add(id);
-                        vertices[id].cycleId = newCycleId;
-                        if (offsetRelative < inCycleOffsetRelative)
+                        start.cycleOffset = findCycleOffset(start);
+                    }
+
+                    // joining cycles:
+                    Console.WriteLine($"{bestSelfArc.from} --> {bestSelfArc.to}");
+                    vertices[bestSelfArc.from].arcs[0] = bestSelfArc;
+
+                    newCycleId = findVerticesInCycle(bestSelfArc.from).OrderBy(v => v.id).First().id;
+                    int newCycleCost = bestSelfArc.cost;
+                    int tmpId = bestSelfArc.to;
+                    for (int i = 0; i < newCycleLength; i++)
+                    {
+                        newCycleCost += vertices[tmpId].arcs[0].cost;
+                        tmpId = vertices[tmpId].arcs[0].to; // next
+                        Vertex v = vertices[tmpId];
+                    }
+                    int counter = 0;
+                    Console.WriteLine($"Old cycle: [id: {cycleId}, length:{cycleLength}]");
+                    Console.WriteLine($"New cycle: [id: {newCycleId}, length:{newCycleLength}, cost: {newCycleCost}]");
+                    Vertex tmpIn = vertices[cycleId];
+                    for (int i = 0; i < vertices[bestSelfArc.to].cycleOffset; i++)
+                    {
+                        tmpIn = vertices[tmpIn.arcs[0].to];
+                    }
+                    Vertex oldIn = new Vertex(tmpIn.id, tmpIn.olig, tmpIn.arcs);
+                    oldIn.incoming = tmpIn.incoming;
+                    oldIn.pathLength = tmpIn.pathLength;
+                    oldIn.arcs = tmpIn.arcs;
+                    oldIn.pathCost = tmpIn.pathCost;
+                    Console.WriteLine($"Old IN {oldIn.id} {oldIn.olig.text} {oldIn.cycleOffset}    cost:{oldIn.arcs[0].cost}");
+
+                    foreach (Vertex v in findVerticesInCycle(newCycleId))
+                    {
+                        v.cycleOffset = counter++;
+                        v.cycleId = newCycleId;
+                        v.pathLength = newCycleLength;
+                        v.pathCost = newCycleCost;
+
+                        visited.Add(v.id);
+                        // Display new cycle:
+                        // Console.WriteLine($"{v.id}\t{v.olig.text} {v.cycleOffset}\t cost:{v.arcs[0].cost}");
+                    }
+
+                    foreach (Vertex start in startVerticesInThisCycle)
+                    {
+                        int id = start.id;
+                        Console.Write($"{start.id} ");
+                        int oldOffset = start.cycleOffset;
+                        int offsetRelative = ((-1 + oldOffset - outCycleOffset + cycleLength) % cycleLength);
+                        int inOffsetRelative = ((-1 + oldIn.cycleOffset - outCycleOffset + cycleLength) % cycleLength);
+
+                        int newOffset = findCycleOffset(start); // only works for joiners with offset >= inOffset
+                        int lenDiff = start.pathLength - cycleLength - inOffsetRelative; // only works for joiners with offset > inOffset
+                        Console.WriteLine($"Changing vertecies starting with {start.olig.text} (length: {start.pathLength}) in cycle {start.cycleId} with offset {oldOffset} (rel:{offsetRelative})");
+                        for (int i = 0; i < start.pathLength - cycleLength; i++)
                         {
-                            int pathLengthDiffUntilNewCycle = inCycleOffsetRelative - offsetRelative;
-                            Console.WriteLine($"(!!! NOT IMPLEMENTED YET !!!) Path from old entrance to the cycle to the new entrance is {pathLengthDiffUntilNewCycle}");
-                            // todo: recalculate new offset
+                            if (visited.Contains(id)) break;
+                            visited.Add(id);
+                            vertices[id].cycleId = newCycleId;
+                            if (offsetRelative < inCycleOffsetRelative)
+                            {
+                                int pathLengthDiffUntilNewCycle = inCycleOffsetRelative - offsetRelative;
+                                Console.WriteLine($"(!!! NOT IMPLEMENTED YET !!!) Path from old entrance to the cycle to the new entrance is {pathLengthDiffUntilNewCycle}");
+                                // todo: recalculate new offset
+                            }
+                            if (offsetRelative > inCycleOffsetRelative)
+                            {
+                                vertices[id].cycleOffset = newOffset;
+                                vertices[id].pathLength += lenDiff;
+                                //vertices[id].pathCost += costDifference;
+                                vertices[id].cycleId = newCycleId;
+                            }
+                            if (offsetRelative == inCycleOffsetRelative)
+                            {
+                                vertices[id].cycleOffset = newOffset;
+                                vertices[id].pathLength += lenDiff - vertices[id].pathLength + cycleLength;
+                                //vertices[id].pathCost += costDifference;
+                                vertices[id].cycleId = newCycleId;
+                            }
+                            // ! Commented out ! be careful not to override things such as cycle offset, since it is used in further iterations,
+                            // ! i might need to calculate it for each vertex before looping over it.
+                            // vertices[id].cycleOffset = 0;// newOffset;
+                            // vertices[id].pathLength += 0;// lenDiff;
+                            // vertices[id].pathCost += 0;// costDifference;
+                            // vertices[id].cycleId = newCycleId;
+                            id = vertices[id].arcs[0].to; // next
                         }
-                        if (offsetRelative > inCycleOffsetRelative)
+                    }
+
+
+
+                    cycles.Remove(cycleId);
+                    cycles.Add(newCycleId);
+                    Console.WriteLine("---\n\n");
+
+
+                    //////////// END OF SELF JOIN
+                }
+                else if (!doSelfJoin)
+                {
+                    //// Actually break the cycle and join to another using `bestArc`
+                    // the part we are joining to does not need adjustment, only the cycle currently being broken.
+                    List<Vertex> cycle = findVerticesInCycle(cycleId);
+                    startVerticesInThisCycle = vertices.Where(a => a.incoming == 0 && a.cycleId == cycleId).OrderByDescending(a => a.pathLength).ToList();
+
+                    // int newCycleId = 0; //! find cycle id
+                    int newOffset = findCycleOffset(vertices[bestArc.to]);
+                    int costDifference = vertices[bestArc.to].pathCost; // for now - ignoring old cycle offset in this calculation
+                    List<int> visited = new List<int>(); // pewnie można by to zrobić lepiej niż lista, ale taki quick fix żeby wielokroenie nie modyfikować
+                    vertices[vertices[bestArc.to].arcs[0].to].incoming -= 1; // stop pointing arc to this vertex
+                    foreach (Vertex v in findVerticesInCycle(bestArc.from))
+                    {
+                        int cutOffLength = (-1 + newOffset - v.cycleOffset) % cycleLength;
+                        vertices[v.id].cycleOffset = newOffset;
+                        vertices[v.id].pathLength += vertices[bestArc.to].pathLength - cutOffLength;
+                        visited.Add(v.id);
+                    }
+                    foreach (Vertex start in startVerticesInThisCycle)
+                    {
+                        int id = start.id;
+                        int oldOffset = findCycleOffset(start);
+                        int lenDiff = -((-1 + oldOffset - vertices[bestArc.from].cycleOffset) % cycleLength) + vertices[bestArc.to].pathLength;
+                        for (int i = 0; i < start.pathLength - cycleLength; i++)
                         {
+                            if (visited.Contains(id)) break;
+                            visited.Add(id);
                             vertices[id].cycleOffset = newOffset;
                             vertices[id].pathLength += lenDiff;
-                            //vertices[id].pathCost += costDifference;
+                            vertices[id].pathCost += costDifference;
                             vertices[id].cycleId = newCycleId;
+                            id = vertices[id].arcs[0].to; // next
                         }
-                        if (offsetRelative == inCycleOffsetRelative)
-                        {
-                            vertices[id].cycleOffset = newOffset;
-                            vertices[id].pathLength += lenDiff - vertices[id].pathLength + cycleLength;
-                            //vertices[id].pathCost += costDifference;
-                            vertices[id].cycleId = newCycleId;
-                        }
-                        // ! Commented out ! be careful not to override things such as cycle offset, since it is used in further iterations,
-                        // ! i might need to calculate it for each vertex before looping over it.
-                        // vertices[id].cycleOffset = 0;// newOffset;
-                        // vertices[id].pathLength += 0;// lenDiff;
-                        // vertices[id].pathCost += 0;// costDifference;
-                        // vertices[id].cycleId = newCycleId;
-                        id = vertices[id].arcs[0].to; // next
                     }
-                }
 
+                    // actually joining graphs:
+                    vertices[bestArc.from].arcs[0] = bestArc;
+                    cycles.Remove(cycleId);
 
-
-                cycles.Remove(cycleId);
-                cycles.Add(newCycleId);
-                Console.WriteLine("---\n\n");
-
-
-                //////////// END OF SELF JOIN
-
-                /*
-                //// Actually break the cycle and join to another using `bestArc`
-                // the part we are joining to does not need adjustment, only the cycle currently being broken.
-                List<Vertex> cycle = findVerticesInCycle(cycleId);
-                startVerticesInThisCycle = vertices.Where(a => a.incoming == 0 && a.cycleId == cycleId).OrderByDescending(a => a.pathLength).ToList();
-
-                // int newCycleId = 0; //! find cycle id
-                int newOffset = findCycleOffset(vertices[bestArc.to]);
-                int costDifference = vertices[bestArc.to].pathCost; // for now - ignoring old cycle offset in this calculation
-                List<int> visited = new List<int>(); // pewnie można by to zrobić lepiej niż lista, ale taki quick fix żeby wielokroenie nie modyfikować
-                vertices[vertices[bestArc.to].arcs[0].to].incoming -= 1; // stop pointing arc to this vertex
-                foreach (Vertex v in findVerticesInCycle(bestArc.from))
-                {
-                    int cutOffLength = (-1 + newOffset - v.cycleOffset) % cycleLength;
-                    vertices[v.id].cycleOffset = newOffset;
-                    vertices[v.id].pathLength += vertices[bestArc.to].pathLength - cutOffLength;
-                    visited.Add(v.id);
-                }
-                foreach (Vertex start in startVerticesInThisCycle)
-                {
-                    int id = start.id;
-                    int oldOffset = findCycleOffset(start);
-                    int lenDiff = -((-1 + oldOffset - vertices[bestArc.from].cycleOffset) % cycleLength) + vertices[bestArc.to].pathLength;
-                    for (int i = 0; i < start.pathLength - cycleLength; i++)
+                    Console.WriteLine($"After join, cycle {newCycleId} of length {findPathLength(vertices[newCycleId], new List<int>())} has starting points of such lengths:");
+                    foreach (Vertex v in vertices)
                     {
-                        if (visited.Contains(id)) break;
-                        visited.Add(id);
-                        vertices[id].cycleOffset = newOffset;
-                        vertices[id].pathLength += lenDiff;
-                        vertices[id].pathCost += costDifference;
-                        vertices[id].cycleId = newCycleId;
-                        id = vertices[id].arcs[0].to; // next
+                        if (v.cycleId == newCycleId && v.incoming == 0)
+                            Console.Write($"{v.pathLength} ");
                     }
+                    Console.WriteLine();
                 }
-
-                // actually joining graphs:
-                vertices[bestArc.from].arcs[0] = bestArc;
-                cycles.Remove(cycleId);
-
-                Console.WriteLine($"After join, cycle {newCycleId} of length {findPathLength(vertices[newCycleId], new List<int>())} has starting points of such lengths:");
-                foreach (Vertex v in vertices)
-                {
-                    if (v.cycleId == newCycleId && v.incoming == 0)
-                        Console.Write($"{v.pathLength} ");
-                }
-                Console.WriteLine();
-
                 Console.WriteLine($"========================{cycles.Count}-cycles-remaining========================");
-                */
-                break; // Breaking the loop (Testing first iteration)
+                iterationsLimiter--;
+                //break; // Breaking the loop (Testing first iteration)
             }
 
             Console.WriteLine($"Given instance {instance.name}");
@@ -449,10 +466,33 @@ namespace DNAseq
             Vertex starting = vertices.Where(a => a.incoming == 0).OrderByDescending(a => a.pathLength).First();
             Console.WriteLine($"oligCount: {starting.pathLength}, length: {10 + starting.pathCost}");
             printSuccessors(starting.id);
-
-
-
-            Console.WriteLine("Finished.");
+            
+            
+            //////////// Formatting the output
+            List<int> tmpVisited = new List<int>();
+            int tmpIdx = starting.id;
+            int oligLength = 10;
+            int tmpOffset = 10;
+            int totalOffset = 0;
+            StringBuilder sequenceStringBuilder = new StringBuilder();
+            while (!tmpVisited.Contains(tmpIdx))
+            {
+                tmpVisited.Add(tmpIdx);
+                if (oligLength - tmpOffset < 0) { Console.WriteLine($"ERROR: Unexpected offset {oligLength - tmpOffset}! after {tmpVisited.Count} elements"); break; }
+                string a = vertices[tmpIdx].olig.text.Substring(oligLength - tmpOffset);
+                Console.WriteLine($"{tmpIdx}\t{a}");
+                sequenceStringBuilder.Append(a);
+                tmpOffset = calculateOffset(vertices[tmpIdx].olig, vertices[vertices[tmpIdx].arcs[0].to].olig) ?? 10;//vertices[tmpIdx].arcs[0].offset; // sometimes errors?
+                if (tmpOffset < 0) tmpOffset = 10;
+                tmpIdx = vertices[tmpIdx].arcs[0].to;
+                /*for (int i = 0; i < totalOffset; i++) Console.Write(" ");
+                Console.WriteLine($"{vertices[tmpIdx].olig.text}");*/
+                totalOffset += tmpOffset;
+                solutionOligCount++;
+            }
+            String result = sequenceStringBuilder.ToString();
+            Console.WriteLine($"Finished instance {instance.name}.");
+            return result;
         }
 
         public void printSuccessors(int id)
